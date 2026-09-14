@@ -2,6 +2,7 @@
  * Development seed. Wipes the ProjectFlow collections and inserts a small,
  * realistic dataset so the app is usable immediately after a fresh checkout.
  */
+import { CounterSchema } from '../tasks/schemas/counter.schema';
 import { resolve } from 'node:path';
 import { config as loadEnv } from 'dotenv';
 import * as bcrypt from 'bcryptjs';
@@ -27,6 +28,7 @@ const OrganizationMember = mongoose.model('OrganizationMember', OrganizationMemb
 const Project = mongoose.model('Project', ProjectSchema);
 const ProjectMember = mongoose.model('ProjectMember', ProjectMemberSchema);
 const Task = mongoose.model('Task', TaskSchema);
+const Counter = mongoose.model('Counter', CounterSchema);
 const Comment = mongoose.model('Comment', CommentSchema);
 
 interface SeedUser {
@@ -48,14 +50,15 @@ async function seed(): Promise<void> {
   console.warn(`Connected to ${MONGODB_URI}`);
 
   await Promise.all([
-    Comment.deleteMany({}),
-    Task.deleteMany({}),
-    ProjectMember.deleteMany({}),
-    Project.deleteMany({}),
-    OrganizationMember.deleteMany({}),
-    Organization.deleteMany({}),
-    User.deleteMany({}),
-  ]);
+  Comment.deleteMany({}),
+  Task.deleteMany({}),
+  Counter.deleteMany({}),
+  ProjectMember.deleteMany({}),
+  Project.deleteMany({}),
+  OrganizationMember.deleteMany({}),
+  Organization.deleteMany({}),
+  User.deleteMany({}),
+]);
 
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
   const users = await User.insertMany(
@@ -216,6 +219,16 @@ async function seed(): Promise<void> {
   }));
 
   const tasks = await Task.insertMany([...engineeringTasks, ...portalTasks]);
+  await Counter.insertMany([
+  {
+    projectId: internalPlatform._id,
+    lastNumber: 6,
+  },
+  {
+    projectId: customerPortal._id,
+    lastNumber: 3,
+  },
+]);
   const taskIdByKey = new Map(tasks.map((task) => [task.key, task._id as Types.ObjectId]));
   const taskId = (key: string): Types.ObjectId => {
     const id = taskIdByKey.get(key);

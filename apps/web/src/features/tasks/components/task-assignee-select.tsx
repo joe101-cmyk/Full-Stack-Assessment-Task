@@ -1,8 +1,10 @@
 'use client';
 
 import { toast } from 'sonner';
+import { useState } from 'react';
 import { ProjectRole, type TaskDetail } from '@projectflow/shared';
 import { Avatar } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useProject, useProjectMembers } from '@/features/projects/hooks';
@@ -14,6 +16,7 @@ interface TaskAssigneeSelectProps {
 }
 
 export function TaskAssigneeSelect({ task, projectId }: TaskAssigneeSelectProps) {
+  const [search, setSearch] = useState('');
   const { data: currentUser } = useCurrentUser();
   const { data: project } = useProject(projectId);
   const { data: projectMembers = [] } = useProjectMembers(projectId);
@@ -38,6 +41,12 @@ export function TaskAssigneeSelect({ task, projectId }: TaskAssigneeSelectProps)
     : currentUserId
       ? projectMembers.filter((member) => member.user.id === currentUserId)
       : [];
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredMembers = normalizedSearch
+    ? selectableMembers.filter((member) =>
+        `${member.user.name} ${member.user.email}`.toLowerCase().includes(normalizedSearch),
+      )
+    : selectableMembers;
 
   const selectedAssignee = task.assignee;
 
@@ -64,30 +73,43 @@ export function TaskAssigneeSelect({ task, projectId }: TaskAssigneeSelectProps)
       </div>
 
       {canManageAssignee ? (
-        <Select
-          value={selectedAssignee?.id ?? '__unassigned__'}
-          disabled={disabled}
-          onValueChange={handleValueChange}
-        >
-          <SelectTrigger id="task-assignee" aria-label="Task assignee" className="min-h-9">
-            {selectedAssignee ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <Avatar user={selectedAssignee} size="sm" />
-                <span className="truncate text-left">{selectedAssignee.name}</span>
-              </div>
-            ) : (
-              <span className="text-subtle-foreground">Unassigned</span>
-            )}
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__unassigned__">Unassigned</SelectItem>
-            {selectableMembers.map((member) => (
-              <SelectItem key={member.id} value={member.user.id}>
-                {member.user.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          {selectableMembers.length > 8 ? (
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search members"
+              aria-label="Search project members"
+            />
+          ) : null}
+          <Select
+            value={selectedAssignee?.id ?? '__unassigned__'}
+            disabled={disabled}
+            onValueChange={handleValueChange}
+          >
+            <SelectTrigger id="task-assignee" aria-label="Task assignee" className="min-h-9">
+              {selectedAssignee ? (
+                <div className="flex min-w-0 items-center gap-2">
+                  <Avatar user={selectedAssignee} size="sm" />
+                  <span className="truncate text-left">{selectedAssignee.name}</span>
+                </div>
+              ) : (
+                <span className="text-subtle-foreground">Unassigned</span>
+              )}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__unassigned__">Unassigned</SelectItem>
+              {filteredMembers.map((member) => (
+                <SelectItem key={member.id} value={member.user.id}>
+                  {member.user.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectableMembers.length > 0 && filteredMembers.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground">No matching members.</p>
+          ) : null}
+        </div>
       ) : (
         <div className="flex min-h-9 items-center gap-2 rounded-md border border-border bg-surface-strong px-2.5 text-[13px] text-foreground">
           {selectedAssignee ? (

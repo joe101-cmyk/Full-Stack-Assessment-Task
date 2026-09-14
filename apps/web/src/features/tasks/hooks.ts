@@ -73,7 +73,10 @@ export function useUpdateTaskAssignee(taskId: string, projectId: string) {
     mutationFn: (assigneeId) => updateTaskAssignee(taskId, assigneeId),
     onSuccess: async (task) => {
       queryClient.setQueryData(queryKeys.task(taskId), task);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', taskId, 'activity'] }),
+      ]);
     },
   });
 }
