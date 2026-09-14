@@ -69,6 +69,19 @@ export interface CommentEntry {
   updatedAt: string;
 }
 
+export type TaskActivityType = 'ASSIGNEE_CHANGED';
+
+export interface TaskActivityEntry {
+  id: string;
+  taskId: string;
+  projectId: string;
+  actor: UserSummary | null;
+  type: TaskActivityType;
+  fromAssignee: UserSummary | null;
+  toAssignee: UserSummary | null;
+  createdAt: string;
+}
+
 export interface AuthSession {
   accessToken: string;
   user: UserSummary;

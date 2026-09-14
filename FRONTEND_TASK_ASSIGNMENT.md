@@ -90,3 +90,40 @@ The following checks were actually run:
   - Result: 1 test suite passed, 8 tests passed.
 - `pnpm --filter @projectflow/shared build; pnpm --filter @projectflow/web typecheck`
   - Result: shared package build succeeded and the web TypeScript check passed.
+
+# Activity History Frontend
+
+## Activity Timeline
+
+The Task Detail page now includes an Activity History timeline for assignee changes. Each entry shows the actor, readable previous/new assignee information, and a semantic timestamp. Raw IDs are never shown.
+
+## API Integration
+
+The web API layer calls `GET /tasks/:taskId/activity` using the shared `Paginated<TaskActivityEntry>` contract. Assignment mutations invalidate the task activity query so the timeline reflects the latest change.
+
+## React Query
+
+`useTaskActivity(taskId, page)` scopes its query key to the task and page, and uses the existing query provider and API client patterns.
+
+## States and Pagination
+
+The timeline has loading skeletons, an error message, and a clear `No activity yet.` empty state. When more than one page exists, accessible Previous and Next buttons are shown with the current page.
+
+## Accessibility and Responsive Behavior
+
+The timeline uses a labelled section, ordered list, semantic `time` elements, keyboard-accessible buttons, and text descriptions that do not rely on color. It is placed inside the existing responsive task detail layout and uses the established UI primitives.
+
+## Files Changed
+
+- `apps/web/src/features/tasks/api.ts`: typed activity API function.
+- `apps/web/src/features/tasks/hooks.ts`: activity query and assignment invalidation.
+- `apps/web/src/features/tasks/components/task-activity-timeline.tsx`: timeline states and pagination.
+- `apps/web/src/features/tasks/components/task-view.tsx`: timeline placement.
+- `apps/web/src/lib/query-keys.ts`: task activity query key.
+- `packages/shared/src/api.ts`: activity response types.
+
+## Verification
+
+- `pnpm --filter @projectflow/shared build` passed.
+- `pnpm --filter @projectflow/web typecheck` passed.
+- `pnpm --filter @projectflow/web lint` passed.

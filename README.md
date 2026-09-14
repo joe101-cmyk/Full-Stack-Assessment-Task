@@ -175,7 +175,7 @@ projectflow/
 │       └── src/
 │           ├── app/             routes and layouts
 │           ├── components/      design system primitives + app shell
-│           ├── features/        auth, projects, tasks, comments
+│           ├── features/        auth, projects, tasks, comments, activity history
 │           ├── lib/             API client, query keys, formatting
 │           └── providers/       TanStack Query provider
 │
@@ -199,6 +199,7 @@ Organization        ── OrganizationMember ── User      (OWNER | ADMIN | 
 Organization  ── Project
 Project             ── ProjectMember      ── User      (PROJECT_MANAGER | MEMBER)
 Project       ── Task ── Comment
+                  └─ TaskActivity (assignee changes only)
 ```
 
 Membership is stored in its own collection rather than as arrays on the parent

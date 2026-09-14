@@ -10,6 +10,7 @@ import { useTask } from '../hooks';
 import { TaskAssigneeSelect } from './task-assignee-select';
 import { TaskPriorityBadge } from './task-priority-badge';
 import { TaskStatusSelect } from './task-status-select';
+import { TaskActivityTimeline } from './task-activity-timeline';
 
 interface TaskViewProps {
   projectId: string;
@@ -70,6 +71,7 @@ export function TaskView({ projectId, taskId }: TaskViewProps) {
           </section>
 
           <CommentList taskId={taskId} />
+          <TaskActivityTimeline taskId={taskId} />
         </div>
 
         <aside className="space-y-5 lg:border-l lg:border-border lg:pl-6">

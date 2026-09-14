@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { type FilterQuery, Model, Types } from 'mongoose';
-import type { Paginated, TaskDetail, TaskSummary } from '@projectflow/shared';
+import type { Paginated, TaskActivityEntry, TaskDetail, TaskSummary } from '@projectflow/shared';
 import { toUserSummary } from '../common/utils/serialize';
 import { Comment, type CommentDocument } from '../comments/schemas/comment.schema';
 import { canManage, ProjectAccessService } from '../projects/project-access.service';
@@ -12,6 +12,7 @@ import type { ListTasksQueryDto } from './dto/list-tasks.dto';
 import type { UpdateTaskDto } from './dto/update-task.dto';
 import type { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, type TaskDocument } from './schemas/task.schema';
+import { TaskActivity, type TaskActivityDocument } from './schemas/task-activity.schema';
 
 
 
@@ -27,6 +28,7 @@ private readonly counterModel: Model<Counter>,
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
     @InjectModel(Project.name) private readonly projectModel: Model<ProjectDocument>,
     @InjectModel(Comment.name) private readonly commentModel: Model<CommentDocument>,
+    @InjectModel(TaskActivity.name) private readonly activityModel: Model<TaskActivityDocument>,
     private readonly projectAccessService: ProjectAccessService,
     private readonly usersService: UsersService,
   ) {}
@@ -149,6 +151,7 @@ const number = counter.lastNumber;
   assigneeId: Types.ObjectId | null,
 ): Promise<TaskDetail> {
   const task = await this.findTaskOrFail(taskId);
+  const oldAssigneeId = task.assigneeId ?? null;
 
   const { project } =
     await this.projectAccessService.assertCanAssign(
@@ -161,6 +164,17 @@ const number = counter.lastNumber;
 
   await task.save();
 
+  if (!sameObjectId(oldAssigneeId, assigneeId)) {
+    await this.activityModel.create({
+      taskId: task._id,
+      projectId: task.projectId,
+      actorId: userId,
+      type: 'ASSIGNEE_CHANGED',
+      fromAssigneeId: oldAssigneeId,
+      toAssigneeId: assigneeId,
+    });
+  }
+
   return this.toDetail(task, project);
 }
 
@@ -169,6 +183,57 @@ const number = counter.lastNumber;
     await this.projectAccessService.assertCanManage(task.projectId, userId);
 
     await Promise.all([this.commentModel.deleteMany({ taskId: task._id }), task.deleteOne()]);
+  }
+
+  async findActivity(
+    taskId: Types.ObjectId,
+    userId: Types.ObjectId,
+    query: import('../common/dto/pagination.dto').PaginationQueryDto,
+  ): Promise<Paginated<TaskActivityEntry>> {
+    const task = await this.findTaskOrFail(taskId);
+    await this.projectAccessService.assertCanView(task.projectId, userId);
+
+    const [activities, total] = await Promise.all([
+      this.activityModel
+        .find({ taskId })
+        .sort({ createdAt: -1 })
+        .skip(query.skip)
+        .limit(query.pageSize)
+        .exec(),
+      this.activityModel.countDocuments({ taskId }),
+    ]);
+
+    return {
+      items: await this.toActivityEntries(activities),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  private async toActivityEntries(activities: TaskActivityDocument[]): Promise<TaskActivityEntry[]> {
+    const userIds = activities.flatMap((activity) =>
+      [activity.actorId, activity.fromAssigneeId, activity.toAssigneeId].filter(
+        (id): id is Types.ObjectId => id instanceof Types.ObjectId,
+      ),
+    );
+    const users = await this.usersService.findManyByIds(userIds);
+    const usersById = new Map(users.map((user) => [user._id.toString(), toUserSummary(user)]));
+
+    return activities.map((activity) => ({
+      id: activity._id.toString(),
+      taskId: activity.taskId.toString(),
+      projectId: activity.projectId.toString(),
+      actor: usersById.get(activity.actorId.toString()) ?? null,
+      type: activity.type,
+      fromAssignee: activity.fromAssigneeId
+        ? usersById.get(activity.fromAssigneeId.toString()) ?? null
+        : null,
+      toAssignee: activity.toAssigneeId
+        ? usersById.get(activity.toAssigneeId.toString()) ?? null
+        : null,
+      createdAt: activity.createdAt.toISOString(),
+    }));
   }
 
   async findTaskOrFail(taskId: Types.ObjectId): Promise<TaskDocument> {
@@ -242,6 +307,10 @@ const number = counter.lastNumber;
       },
     };
   }
+}
+
+function sameObjectId(left: Types.ObjectId | null, right: Types.ObjectId | null): boolean {
+  return left === null && right === null ? true : left !== null && right !== null && left.equals(right);
 }
 
 const DELETED_USER = {
