@@ -32,6 +32,9 @@ export class Task {
 
   @Prop({ type: String, enum: TASK_PRIORITIES, required: true, default: TaskPriority.MEDIUM })
   priority: TaskPriority;
+  @Prop({type:Types.ObjectId,ref:"User",default:null})
+  assigneeId?:Types.ObjectId|null
+
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;

@@ -99,6 +99,34 @@ describe('Tasks', () => {
     ]);
   });
 
+  it('refuses to update task status for someone outside the project', async () => {
+  const createResponse = await request(app.getHttpServer())
+    .post(`/projects/${projectId}/tasks`)
+    .set('Authorization', authHeader(member))
+    .send({
+      title: 'Protected task',
+      status: TaskStatus.TODO,
+    })
+    .expect(201);
+
+  const taskId = createResponse.body.id;
+
+  await request(app.getHttpServer())
+    .patch(`/tasks/${taskId}/status`)
+    .set('Authorization', authHeader(outsider))
+    .send({
+      status: TaskStatus.DONE,
+    })
+    .expect(403);
+
+  const response = await request(app.getHttpServer())
+    .get(`/tasks/${taskId}`)
+    .set('Authorization', authHeader(member))
+    .expect(200);
+
+  expect(response.body.status).toBe(TaskStatus.TODO);
+});
+
   it('refuses to create a task for someone outside the project', async () => {
     await request(app.getHttpServer())
       .post(`/projects/${projectId}/tasks`)
@@ -145,5 +173,27 @@ describe('Tasks', () => {
 
     expect(response.body.total).toBe(1);
     expect(response.body.items[0]).toMatchObject({ title: 'Work in flight' });
+  });
+
+  it('allows a project manager to assign a task to another project member', async () => {
+    const projectManager = await registerUser(app, 'Project Manager', 'pm@example.com');
+    await addProjectMember(connection, projectId, projectManager.id, ProjectRole.PROJECT_MANAGER);
+
+    const createResponse = await request(app.getHttpServer())
+      .post(`/projects/${projectId}/tasks`)
+      .set('Authorization', authHeader(member))
+      .send({ title: 'Assign this task' })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .patch(`/tasks/${createResponse.body.id}/assignee`)
+      .set('Authorization', authHeader(projectManager))
+      .send({ assigneeId: member.id })
+      .expect(200);
+
+    expect(response.body.assignee).toMatchObject({
+      id: member.id,
+      email: 'magd@example.com',
+    });
   });
 });

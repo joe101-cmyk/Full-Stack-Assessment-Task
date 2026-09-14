@@ -15,10 +15,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { toObjectId } from '../common/utils/object-id';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks.dto';
+import { AssignTaskDto } from './dto/assign_task_dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { TasksService } from './tasks.service';
-
 @Controller()
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
@@ -70,9 +70,29 @@ export class TasksController {
   @Patch('tasks/:taskId/status')
   updateStatus(
     @Param('taskId') taskId: string,
+    @CurrentUser('id') userId: string,
     @Body() dto: UpdateTaskStatusDto,
   ): Promise<TaskDetail> {
-    return this.tasksService.updateStatus(toObjectId(taskId, 'task id'), dto);
+    return this.tasksService.updateStatus(
+      toObjectId(taskId, 'task id'),
+      dto,
+      toObjectId(userId, 'user id'),
+    );
+  }
+
+  @Patch('tasks/:taskId/assignee')
+  assignTask(
+    @Param('taskId') taskId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: AssignTaskDto,
+  ): Promise<TaskDetail> {
+    const assigneeId = dto.assigneeId ? toObjectId(dto.assigneeId, 'assignee id') : null;
+
+    return this.tasksService.assignTask(
+      toObjectId(taskId, 'task id'),
+      toObjectId(userId, 'user id'),
+      assigneeId,
+    );
   }
 
   @Delete('tasks/:taskId')

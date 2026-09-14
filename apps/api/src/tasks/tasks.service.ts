@@ -13,9 +13,17 @@ import type { UpdateTaskDto } from './dto/update-task.dto';
 import type { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { Task, type TaskDocument } from './schemas/task.schema';
 
+
+
+
+
+import { Counter } from './schemas/counter.schema';
+
 @Injectable()
 export class TasksService {
   constructor(
+    @InjectModel(Counter.name)
+private readonly counterModel: Model<Counter>,
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
     @InjectModel(Project.name) private readonly projectModel: Model<ProjectDocument>,
     @InjectModel(Comment.name) private readonly commentModel: Model<CommentDocument>,
@@ -58,8 +66,18 @@ export class TasksService {
   ): Promise<TaskDetail> {
     const { project } = await this.projectAccessService.assertCanView(projectId, userId);
 
-    const taskCount = await this.taskModel.countDocuments({ projectId });
-    const number = taskCount + 1;
+    const counter = await this.counterModel.findOneAndUpdate(
+  { projectId },
+  { $inc: { lastNumber: 1 } },
+  { new: true, upsert: true },
+);
+
+const number = counter.lastNumber;
+
+
+
+    // const taskCount = await this.taskModel.countDocuments({ projectId });
+    // const number = taskCount + 1;
 
     const task = await this.taskModel.create({
       projectId,
@@ -113,14 +131,38 @@ export class TasksService {
     return this.toDetail(task, access.project);
   }
 
-  async updateStatus(taskId: Types.ObjectId, dto: UpdateTaskStatusDto): Promise<TaskDetail> {
+  async updateStatus(taskId: Types.ObjectId, dto: UpdateTaskStatusDto,userId: Types.ObjectId): Promise<TaskDetail> {
     const task = await this.findTaskOrFail(taskId);
-
+    const access = await this.projectAccessService.assertCanView(task.projectId, userId);
     task.status = dto.status;
+      const isCreator = task.createdBy.equals(userId);
+    if (!canManage(access) && !isCreator) {
+      throw new ForbiddenException('You do not have permission to edit this task');
+    }
     await task.save();
 
     return this.toDetail(task);
   }
+  async assignTask(
+  taskId: Types.ObjectId,
+  userId: Types.ObjectId,
+  assigneeId: Types.ObjectId | null,
+): Promise<TaskDetail> {
+  const task = await this.findTaskOrFail(taskId);
+
+  const { project } =
+    await this.projectAccessService.assertCanAssign(
+      task.projectId,
+      userId,
+      assigneeId,
+    );
+
+  task.assigneeId = assigneeId;
+
+  await task.save();
+
+  return this.toDetail(task, project);
+}
 
   async remove(taskId: Types.ObjectId, userId: Types.ObjectId): Promise<void> {
     const task = await this.findTaskOrFail(taskId);
@@ -142,8 +184,13 @@ export class TasksService {
       return [];
     }
 
-    const [creators, commentRows] = await Promise.all([
+    const assigneeIds = tasks
+      .map((task) => task.assigneeId)
+      .filter((assigneeId): assigneeId is Types.ObjectId => assigneeId instanceof Types.ObjectId);
+
+    const [creators, assignees, commentRows] = await Promise.all([
       this.usersService.findManyByIds(tasks.map((task) => task.createdBy)),
+      this.usersService.findManyByIds(assigneeIds),
       this.commentModel
         .aggregate<{
           _id: Types.ObjectId;
@@ -156,6 +203,7 @@ export class TasksService {
     ]);
 
     const creatorsById = new Map(creators.map((user) => [user._id.toString(), user]));
+    const assigneesById = new Map(assignees.map((user) => [user._id.toString(), user]));
     const commentCounts = new Map(commentRows.map((row) => [row._id.toString(), row.count]));
 
     return tasks.map((task) => ({
@@ -166,6 +214,9 @@ export class TasksService {
       title: task.title,
       status: task.status,
       priority: task.priority,
+      assignee: task.assigneeId
+        ? toUserSummary(assigneesById.get(task.assigneeId.toString()) ?? { _id: task.assigneeId, name: 'Unknown user', email: '', avatarUrl: null })
+        : null,
       commentCount: commentCounts.get(task._id.toString()) ?? 0,
       createdBy: toCreatorSummary(creatorsById.get(task.createdBy.toString())),
       createdAt: task.createdAt.toISOString(),

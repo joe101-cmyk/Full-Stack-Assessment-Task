@@ -45,6 +45,43 @@ export class ProjectAccessService {
     return { project, organizationRole, projectRole };
   }
 
+async assertCanAssign(
+  projectId: Types.ObjectId,
+  userId: Types.ObjectId,
+  assigneeId: Types.ObjectId | null,
+): Promise<ProjectAccessContext> {
+  const context = await this.assertCanView(projectId, userId);
+
+  // MEMBER can only assign to themselves
+  if (context.projectRole === ProjectRole.MEMBER) {
+    if (assigneeId && !assigneeId.equals(userId)) {
+      throw new ForbiddenException(
+        'You can only assign tasks to yourself',
+      );
+    }
+  }
+
+  // Assignee must be a project member
+  if (assigneeId) {
+    const assigneeRole =
+      await this.projectMembersService.findRole(
+        projectId,
+        assigneeId,
+      );
+
+    if (!assigneeRole) {
+      throw new ForbiddenException(
+        'Assignee must be a project member',
+      );
+    }
+  }
+
+  return context;
+}
+
+
+
+
   /** Throws unless the user can read the project and its tasks. */
   async assertCanView(
     projectId: Types.ObjectId,
